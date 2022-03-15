@@ -80,3 +80,13 @@ func (c *UnauthenticatedClient) Post(path string, body io.Reader) (*http.Respons
 
 	return c.client.Do(req)
 }
+
+// Post performs an HTTP GET request.
+func (c *UnauthenticatedClient) Get(path string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, fullURL(c.baseURL, path), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.client.Do(req)
+}

@@ -27,6 +27,7 @@ type (
 	Client interface {
 		PostDataReadings(orgID, clusterID string, readings []*api.DataReading) error
 		Post(path string, body io.Reader) (*http.Response, error)
+		Get(path string) (*http.Response, error)
 	}
 
 	// Credentials defines the format of the credentials.json file.

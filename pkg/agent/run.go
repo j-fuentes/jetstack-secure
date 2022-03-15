@@ -156,14 +156,103 @@ func Run(cmd *cobra.Command, args []string) {
 			Period = config.Period
 		}
 
+		syncActions(preflightClient, config)
+
 		gatherAndOutputData(config, preflightClient, dataGatherers)
 
 		if OneShot {
 			break
 		}
 
+		syncActions(preflightClient, config)
+
 		time.Sleep(Period)
 	}
+}
+
+func syncActions(preflightClient client.Client, config Config) {
+	log.Printf("syncing actions")
+	res, err := preflightClient.Get(fmt.Sprintf("/api/v1/org/%s/cluster/%s/ping", config.OrganizationID, config.ClusterID))
+	if err != nil {
+		log.Fatalf("cannot get actions %+v", err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			log.Printf("Error while reading the response bytes:", err)
+		}
+		log.Fatalf("status code %d; body: %q", res.StatusCode, string(body))
+	}
+	
+	actions := []struct {
+		UUID string
+		Type    string
+		Payload json.RawMessage
+	}{}
+	if err = json.NewDecoder(res.Body).Decode(&actions); err != nil {
+		log.Fatalf("cannot decode body: %+v", err)
+	}
+
+	log.Printf("actions: %+v", actions)
+	for _, action := range actions {
+		if action.Type == "DisableCert" {
+			payload := struct{
+				PickupID string
+			}{}
+			err := json.Unmarshal(action.Payload, &payload)
+			if err != nil {
+				log.Fatalf("cannot unmarshall action: %+v", err)
+			}
+
+			// TODO: read this token from an external secret (as Venafi TPP issuer).
+			// The token can be generated with:
+			// curl -X POST "https://<TPP url>/vedauth/authorize/oauth" \
+			// -H "accept: application/json" \
+			// -H "Content-Type: application/json" \
+			// -d '{ "username": "<username>", "password": "<password>", "client_id": "<your API integration ID>", "scope": "configuration:manage"}'
+			// I struggled to generate a token with configuration:manage permissions and certificate:manage. So we might need to require different tokens
+			// for this and for TPP issuer.
+			// this token does not work anymore.
+			const token = "<YOUR TOKEN>"
+			const bearer = "Bearer " + token
+			// TODO: read this from TPP issuer
+			var url = "https://TPP URL" + "/vedsdk/Config/AddValue"
+
+			payloadReq := struct{
+				ObjectDN string `json:"ObjectDN"`
+				AttributeName string `json:"AttributeName"`
+				Value string `json:"Value"`
+			}{
+				ObjectDN: payload.PickupID,
+				AttributeName: "Disabled",
+				Value: "1",
+			}
+			payloadBytes, err := json.Marshal(payloadReq)
+			if err != nil {
+				log.Fatalf("cannot marshall request to tpp: %+v", err)
+			}
+
+			log.Printf("disabling cert %q in TPP %q", payload.PickupID, url)
+			req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(payloadBytes))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Add("Authorization", bearer)
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("error on response: %+v", err)
+			}
+			defer resp.Body.Close()
+
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				log.Println("Error while reading the response bytes:", err)
+			}
+			log.Println(string([]byte(body)))
+		}
+	}
+
 }
 
 func getConfiguration() (Config, client.Client) {

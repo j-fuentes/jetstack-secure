@@ -83,3 +83,15 @@ func (c *APITokenClient) Post(path string, body io.Reader) (*http.Response, erro
 
 	return c.client.Do(req)
 }
+
+// Post performs an HTTP GET request.
+func (c *APITokenClient) Get(path string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, fullURL(c.baseURL, path), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiToken))
+
+	return c.client.Do(req)
+}

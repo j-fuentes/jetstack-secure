@@ -119,6 +119,24 @@ func (c *OAuthClient) Post(path string, body io.Reader) (*http.Response, error) 
 	return c.client.Do(req)
 }
 
+// Post performs an HTTP GET request.
+func (c *OAuthClient) Get(path string) (*http.Response, error) {
+	token, err := c.getValidAccessToken()
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, fullURL(c.baseURL, path), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.bearer))
+
+	return c.client.Do(req)
+}
+
+
 // getValidAccessToken returns a valid access token. It will fetch a new access
 // token from the auth server in case the current access token does not exist
 // or it is expired.
